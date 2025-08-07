@@ -3,23 +3,24 @@
 use strict;
 use warnings;
 use DBI;
+use Cache::Memcached;
 use IO::Socket::INET;
 use POSIX qw(setsid);
 use Fcntl qw(:DEFAULT :flock);
 
 #Config
 my %cfg = (
-	mysql_user => 'root',
-	mysql_pass => '',
+	mysql_user => 'test_user1',
+	mysql_pass => 'test_pass',
 	interval => 30,
 	log_file => '/var/log/galera_status.log',
 	pid_file => '/var/run/galera_status.pid',
-	memcached_host => '127.0.0.1',
-	memcached_port => 11211
+	memc_host => '127.0.0.1',
+	memc_port => 11211
 );
-my @nodes = ({name => 'node1',socket => '/tmp/mysql-node1.sock'},
-	     {name => 'node2',socket => '/tmp/mysql-node2.sock'},
-	     {name => 'node3',socket => '/tmp/mysql-node3.sock'}
+my @nodes = ({name => 'node1',host => '127.0.0.1',port=>3307},
+	     {name => 'node2',host => '127.0.0.1',port=>3308},
+	     {name => 'node3',host => '127.0.0.1',port=>3310}
 );
 my %db_handles;
 my %stmt_handles;
@@ -43,8 +44,8 @@ sub init_daemon {
 	log_msg("Daemon started");	
 }
 sub connect_mysql {
-	my ($socket) = @_;
-	return DBI->connect("DBI:MariaDB:;mariadb_socket=$socket",
+	my ($host, $port) = @_;
+	return DBI->connect("DBI:MariaDB:host=$host;port=$port",
 	 $cfg{mysql_user},
 	 $cfg{mysql_pass},
 	 { RaiseError => 0, PrintError => 0});
@@ -60,48 +61,47 @@ sub get_galera_status {
 	return defined $value ? $value : "UNKNOWN";
 }
 sub connect_memcached {
-	return IO::Socket::INET->new(
-	PeerAddr => $cfg{memcached_host},
-	PeerPort => $cfg{memcached_port},
-	Proto => 'tcp',
-	);
+	return Cache::Memcached->new({
+	servers=>[$cfg{memc_host}.':'.$cfg{memc_port}],
+	debug =>0,
+	compress_threshold=>10_000,
+	});
 }
-sub set_memcached_key {
-	my ($sock, $key, $value) = @_;
-	my $len = length($value);
-	print  $sock "set $key 0 60 $len\r\n$value\r\n"
-}
-
 sub monitor_loop {
 	while(1) {
 	  my $memd = connect_memcached();
 	  log_msg("Memcached unavailable.") unless $memd;
-	  
 	 foreach my $node (@nodes) {
 	  my $name = $node->{name};
-	  my $socket = $node->{socket};
+	  my $host = $node->{host};
+	  my $port = $node->{port};
 	  my $dbh = $db_handles{name};
 	  my $sth = $stmt_handles{name};
 
 	 if(!$dbh||!$dbh->ping) {
-	   $dbh = connect_mysql($socket);
+	   $dbh = connect_mysql($host,$port);
 	 if($dbh) {
 	   $sth= prepare_status_stmt($dbh);
 	   $db_handles{$name} = $dbh;
-	   $stmt_handles{$name} = $sth;
-	   log_msg("Reconnect to $name");			
+	   $stmt_handles{$name} = $sth;			
 	 } else {
-	  log_msg("Failed to connect to $name");
-	  next;
+	  log_msg("$name down");
+	 # next;
 	 }
-      }
-	 my $status = get_galera_status($sth);
-	 my $key = "galera_${name}_${status}";
-	 if ($memd) {
-	   set_memcached_key($memd, $key, $socket);
-	   log_msg("$key => $socket");	
-	 }
+        }
+	my $status = get_galera_status($sth);
+	my $key = "galera_${name}_Synced";
+	if($status eq "Synced"){
+	 $memd->set($key, "$host:$port");
+	 log_msg("Adding $key");
+        }
+	else {
+	 $memd->delete($key);
+	 log_msg("Deleting $key");
+	next;
 	}
+	 log_msg("$key"." = ".$memd->get($key));	
+    }
 	sleep $cfg{interval}; 	
   }
 }

@@ -41,7 +41,7 @@ sub create_prepare_db {
 sub insert_records {
      if($dbi){
 	for (my $i = 0; $i < 1000; $i++) {
-		my $user_recno = int(rand(10_000));
+		my $user_recno = int(rand(50));
 		my $ammount = sprintf("%.2f", rand(5000));
   my $sth = $dbi->prepare("insert into $cfg{table}(user_recno,money_amount,ts_unix_timestamp) values (?,?,UNIX_TIMESTAMP())");
 		$sth->execute($user_recno, $ammount);
@@ -60,12 +60,17 @@ sub return_sum_amount {
       }
 	else {print("Cant return summ")}
 }
-
+sub flush_records {
+	if($dbi){
+	 my $del = $dbi->prepare("truncate table $cfg{table}");
+	$del->execute;
+	}
+}
 my $memd = Cache::Memcached->new({servers => [ $cfg{memc_host}.':'.$cfg{memc_port}]});
 sub pick_first_work_node {
 	for (my $i =1;$i < $cfg{num_nodes}; $i++) {
 	   my $snode = $memd->get("galera_node${i}_Synced");
-	    if(defined $snode){
+           if(defined $snode){
  		return (split /:/, $snode);
 	    }
         }
@@ -75,10 +80,11 @@ my ($host, $port) = pick_first_work_node();
 if($host&&$port){
 	connect_node($host,$port);
 	create_prepare_db();
-	#insert_records();
+	insert_records();
 	return_sum_amount();
+	flush_records();
 	disconnect_node();
-	print ("ActiveNode->$host.':'.$port."\n");
+	print ("ActiveNode->$host:$port\n");
 }
 else{
 	print "No active node is found!\n"
