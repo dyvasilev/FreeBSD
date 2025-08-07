@@ -4,9 +4,8 @@ use strict;
 use warnings;
 use DBI;
 use Cache::Memcached;
-use IO::Socket::INET;
 use POSIX qw(setsid);
-use Fcntl qw(:DEFAULT :flock);
+
 
 #Config
 my %cfg = (
@@ -30,10 +29,6 @@ sub log_msg {
 }
 
 sub init_daemon {
-	open(my $pidf, '>', $cfg{pid_file}) or die "Can't open pid file: $!";
-	flock($pidf, LOCK_EX|LOCK_NB) or die "Already running. \n";
-	print $pidf "$$\n";
-
 	chdir '/';
 	open STDIN, '/dev/null';
 	open STDOUT, '>>', $cfg{log_file} or die "Can't open log: $!";
@@ -90,7 +85,7 @@ sub monitor_loop {
 	 }
         }
 	my $status = get_galera_status($sth);
-	my $key = "galera_${name}_Synced";
+	my $key = "galera_${name}";
 	if($status eq "Synced"){
 	 $memd->set($key, "$host:$port");
 	 log_msg("Adding $key");

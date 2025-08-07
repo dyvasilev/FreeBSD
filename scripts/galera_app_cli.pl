@@ -69,7 +69,7 @@ sub flush_records {
 my $memd = Cache::Memcached->new({servers => [ $cfg{memc_host}.':'.$cfg{memc_port}]});
 sub pick_first_work_node {
 	for (my $i =1;$i < $cfg{num_nodes}; $i++) {
-	   my $snode = $memd->get("galera_node${i}_Synced");
+	   my $snode = $memd->get("galera_node${i}");
            if(defined $snode){
  		return (split /:/, $snode);
 	    }
