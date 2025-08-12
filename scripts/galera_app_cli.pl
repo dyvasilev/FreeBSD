@@ -43,7 +43,7 @@ sub insert_records {
 	for (my $i = 0; $i < 1000; $i++) {
 		my $user_recno = int(rand(50));
 		my $ammount = sprintf("%.2f", rand(5000));
-  my $sth = $dbi->prepare("insert into $cfg{table}(user_recno,money_amount,ts_unix_timestamp) values (?,?,UNIX_TIMESTAMP())");
+                my $sth = $dbi->prepare("insert into $cfg{table}(user_recno,money_amount,ts_unix_timestamp) values (?,?,UNIX_TIMESTAMP())");
 		$sth->execute($user_recno, $ammount);
 	}
      }
@@ -55,21 +55,21 @@ sub return_sum_amount {
 	my $res =$dbi->prepare("select recno, sum(money_amount) as total, count(recno) as record_count from $cfg{table} group by user_recno");
         $res->execute;
 	while (my $row=$res->fetchrow_arrayref){
-	 	print join("\t",@$row),"\n";
+	      print join("\t",@$row),"\n";
         }
       }
 	else {print("Cant return summ")}
 }
 sub flush_records {
 	if($dbi){
-	 my $del = $dbi->prepare("truncate table $cfg{table}");
-	$del->execute;
+	     my $del = $dbi->prepare("truncate table $cfg{table}");
+	     $del->execute;
 	}
 }
 my $memd = Cache::Memcached->new({servers => [ $cfg{memc_host}.':'.$cfg{memc_port}]});
 sub pick_first_work_node {
 	for (my $i =1;$i < $cfg{num_nodes}; $i++) {
-	   my $snode = $memd->get("galera_node${i}");
+	   my $snode = $memd->get("node${i}");
            if(defined $snode){
  		return (split /:/, $snode);
 	    }

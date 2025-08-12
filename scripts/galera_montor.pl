@@ -13,16 +13,15 @@ my %cfg = (
 	mysql_pass => 'test_pass',
 	interval => 30,
 	log_file => '/var/log/galera_status.log',
-	pid_file => '/var/run/galera_status.pid',
 	memc_host => '127.0.0.1',
-	memc_port => 11211
+	memc_port => 11211,
+	memd => undef
 );
-my @nodes = ({name => 'node1',host => '127.0.0.1',port=>3307},
-	     {name => 'node2',host => '127.0.0.1',port=>3308},
-	     {name => 'node3',host => '127.0.0.1',port=>3310}
+my @nodes = ({name => 'node1',host => '127.0.0.1',port => 3307, dbh => undef},
+	     {name => 'node2',host => '127.0.0.1',port => 3308, dbh => undef},
+	     {name => 'node3',host => '127.0.0.1',port => 3310, dbh => undef}
 );
-my %db_handles;
-my %stmt_handles;
+
 sub log_msg {
 	my($msg) = @_;
 	print scalar(localtime)." - $msg\n";
@@ -36,68 +35,57 @@ sub init_daemon {
 	defined(my $pid = fork) or die "Can't fork: $!";
 	exit if $pid;
 	setsid() or die "Can't start session: $!";
-	log_msg("Daemon started");	
+	log_msg("----------Daemon started----------");	
 }
 sub connect_mysql {
 	my ($host, $port) = @_;
 	return DBI->connect("DBI:MariaDB:host=$host;port=$port",
-	 $cfg{mysql_user},
-	 $cfg{mysql_pass},
-	 { RaiseError => 0, PrintError => 0});
+	  $cfg{mysql_user},
+	  $cfg{mysql_pass},
+	  { RaiseError => 0, PrintError => 0});
 }
-sub prepare_status_stmt {
-my ($dbh) = @_;
-return $dbh->prepare("SHOW STATUS LIKE 'wsrep_local_state_comment'");
-}
-sub get_galera_status {
-	my ($sth) = @_;
+
+sub get_node_status {
+	my ($dbh) = @_;
+	if(!$dbh || !$dbh->ping) {
+	  return "DOWN";
+	}
+	my $sth = $dbh->prepare("SHOW STATUS LIKE 'wsrep_local_state_comment'");
 	return "DOWN" unless $sth && $sth->execute;
 	my ($var, $value) = $sth->fetchrow_array;
 	return defined $value ? $value : "UNKNOWN";
 }
 sub connect_memcached {
-	return Cache::Memcached->new({
-	servers=>[$cfg{memc_host}.':'.$cfg{memc_port}],
-	debug =>0,
-	compress_threshold=>10_000,
+	$cfg{memd} = Cache::Memcached->new({
+	  servers => [$cfg{memc_host}.':'.$cfg{memc_port}],
+	  debug => 0,
+	  compress_threshold => 10_000,
 	});
 }
 sub monitor_loop {
 	while(1) {
-	  my $memd = connect_memcached();
-	  log_msg("Memcached unavailable.") unless $memd;
 	 foreach my $node (@nodes) {
-	  my $name = $node->{name};
+	  my $node_name = $node->{name};
 	  my $host = $node->{host};
 	  my $port = $node->{port};
-	  my $dbh = $db_handles{name};
-	  my $sth = $stmt_handles{name};
+	  $node->{dbh} //= connect_mysql($host, $port);
+	  $cfg{memd} //= connect_memcached();
+	  my $node_dbh = $node->{dbh};
+	  my $memcached = $cfg{memd};
 
-	 if(!$dbh||!$dbh->ping) {
-	   $dbh = connect_mysql($host,$port);
-	 if($dbh) {
-	   $sth= prepare_status_stmt($dbh);
-	   $db_handles{$name} = $dbh;
-	   $stmt_handles{$name} = $sth;			
-	 } else {
-	  log_msg("$name down");
-	 # next;
-	 }
-        }
-	my $status = get_galera_status($sth);
-	my $key = "galera_${name}";
-	if($status eq "Synced"){
-	 $memd->set($key, "$host:$port");
-	 log_msg("Adding $key");
-        }
-	else {
-	 $memd->delete($key);
-	 log_msg("Deleting $key");
-	next;
-	}
-	 log_msg("$key"." = ".$memd->get($key));	
+	  my $node_status = get_node_status($node_dbh);
+	  if($node_status eq "Synced") {
+	    $cfg{memd}->set($node_name, "$host:$port");
+	    log_msg("Adding $node_name Synced");
+          }
+	  else {
+	    $cfg{memd}->delete($node_name);
+	    log_msg("Deleting $node_name");
+	    next;
+	  }
+	  log_msg("$node_name"." = ".$cfg{memd}->get($node_name));	
     }
-	sleep $cfg{interval}; 	
+	 sleep $cfg{interval}; 	
   }
 }
 init_daemon();
