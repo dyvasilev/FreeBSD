@@ -6,15 +6,15 @@ mysql:
  mysqld: /usr/local/libexec/mysqld 
 
 nodes:
- -name: node1 
- host: 127.0.0.1 
- port: 3307
- -name: node2
- host: 127.0.0.1
- port: 3308
- -name: node3 
- host: 127.0.0.1
- port: 3310
+ - name: node1 
+   host: 127.0.0.1 
+   port: 3307
+ - name: node2
+   host: 127.0.0.1
+   port: 3308 
+ - name: node3 
+   host: 127.0.0.1
+   port: 3310
 nodes_config:
  sockets_path: /tmp
  log_path: /var/log/mysql
