@@ -1,0 +1,30 @@
+mysql:
+ user: test_user1
+ password: test_pass
+ database: tetsDb
+ table: testTBL
+ mysqld: /usr/local/libexec/mysqld 
+
+nodes:
+ -name: node1 
+ host: 127.0.0.1 
+ port: 3307
+ -name: node2
+ host: 127.0.0.1
+ port: 3308
+ -name: node3 
+ host: 127.0.0.1
+ port: 3310
+nodes_config:
+ sockets_path: /tmp
+ log_path: /var/log/mysql
+ node_cfg_path: /usr/local/etc/mysql
+memcached:
+ host: 127.0.0.1
+ port: 11211
+
+monitor_app:
+ waiting_interval: 30
+ log_path: /var/log/galera_app.log
+app_cli:
+ log_path: /var/log/galera_app_cli.log
