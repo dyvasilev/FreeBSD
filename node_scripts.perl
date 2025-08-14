@@ -20,7 +20,6 @@ my $node_cfg_file = "$node_conf->{node_cfg_path}/my-node${node_id}.cnf";
 my $log_file = "$node_conf->{log_path}/mysql-node${node_id}.err"; 
 my @ACTIVE_SOCKETS = glob("$sockets_folder/mysql-node*.sock");
 
-
 my $CMD_START = "sudo -u mysql $mysql_conf->{mysqld} --defaults-file=${node_cfg_file}";
 my $CMD_LOG = "tail -f $log_file";
 if(!@ACTIVE_SOCKETS) {

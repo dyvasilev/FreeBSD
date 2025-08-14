@@ -1,6 +1,6 @@
 mysql:
  user: test_user1
- password: test_pass
+ pass: test_pass
  database: tetsDb
  table: testTBL
  mysqld: /usr/local/libexec/mysqld 

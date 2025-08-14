@@ -5,16 +5,19 @@ use warnings;
 use DBI;
 use Cache::Memcached;
 use POSIX qw(setsid);
-
+use YAML::XS 'LoadFile';
 
 #Config
+my $path_yaml = "config/config.yaml";
+my $cfg_yaml = LoadFile($path_yaml) or DIE ("Can't parse yaml cofig file");
+
 my %cfg = (
-	mysql_user => 'test_user1',
-	mysql_pass => 'test_pass',
+	mysql_user => $cfg_yaml->{mysql}{user},
+	mysql_pass => $cfg_yaml->{mysql}{pass},
 	interval => 30,
 	log_file => '/var/log/galera_status.log',
-	memc_host => '127.0.0.1',
-	memc_port => 11211,
+	memc_host => $cfg_yaml->{memcached}{host},
+	memc_port => $cfg_yaml->{memcached}{port},
 	memd => undef
 );
 my @nodes = ({name => 'node1',host => '127.0.0.1',port => 3307, dbh => undef},
