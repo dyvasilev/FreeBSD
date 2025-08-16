@@ -7,6 +7,8 @@ use Cache::Memcached;
 use POSIX qw(setsid);
 use YAML::XS 'LoadFile';
 
+my ($action) = @ARGV;
+
 #Config
 my $path_yaml = "config/config.yaml";
 my $cfg_yaml = LoadFile($path_yaml) or DIE ("Can't parse yaml cofig file");
@@ -34,6 +36,7 @@ sub init_daemon {
 	defined(my $pid = fork) or die "Can't fork: $!";
 	exit if $pid;
 	setsid() or die "Can't start session: $!";
+	connect_memcached();
 	log_msg("----------Daemon started----------");	
 }
 sub connect_mysql {
@@ -64,8 +67,8 @@ sub connect_memcached {
 sub continue_monitor {
  $cfg{memd} //= connect_memcached();
  my $monitor_status = $cfg{memd}->get("monitor_status")?
-	$cfg{memd}->get("monitor_staus"):"continue";
- return ($monitor_status ne "stop");
+	$cfg{memd}->get("monitor_status"):"continue";
+	 return ($monitor_status ne "stop");
 }
 sub monitor_loop {
 	while(continue_monitor()) {
@@ -96,4 +99,13 @@ sub monitor_loop {
   }
 }
 init_daemon();
+if ($action eq "stop"){
+	$cfg{memd}->set("monitor_status","stop");
+	log_msg("Stoping galera monitor");
+	exit 0;
+}
+else {
+	$cfg{memd}->set("monitor_status","start");
+ 	log_msg("Galera monitor start");
+}
 monitor_loop();

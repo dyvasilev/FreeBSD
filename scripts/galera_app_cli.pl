@@ -7,26 +7,26 @@ use DBI;
 my $cnf_yaml_path = "config/config.yaml";
 my $cnf_yaml = LoadFile($cnf_yaml_path) or DIE ("YAML cofig file not parsed");
 
-my $mysql_cfg = $cnf_yaml->{mysql};
-my $nodes_cfg = $cnf_yaml->{nodes_cofig};
-my $memc_cfg = $cnf_yaml->{memcached};
+my $cfg_mysql = $cnf_yaml->{mysql};
+my $cfg_nodes = $cnf_yaml->{nodes_cofig};
+my $cfg_memc = $cnf_yaml->{memcached};
 
 my %cfg = (
-	mysql_user => 'test_user1',
-	mysql_pass => 'test_pass',
-	memc_host => $memc_cfg->{host},
-	memc_port => $memc_cfg->{port},
-	database => 'testDb',
-	table => 'testTBL',
-	log_file => '/var/log/galera_app.log',
+	mysql_user => $cfg_mysql->{user},
+	mysql_pass => $cfg_mysql->{pass},
+	memc_host => $cfg_memc->{host},
+	memc_port => $cfg_memc->{port},
+	database => $cfg_memc->{dtatabase},
+	table => $cfg_memc->{table},
+	log_file => $cnf_yaml->{app_cli}{log_file},
 	num_nodes => 4	
 );
 my $dbi = undef;
 sub connect_node {
      	my ($host,$port) = @_;
  	 $dbi= DBI->connect("DBI:MariaDB:host=$host;port=$port",
-	 $mysql_cfg->{user},
-	 $mysql_cfg->{pass},
+	 $cfg_mysql->{user},
+	 $cfg_mysql->{pass},
 	 {RaiseError=>1, PrintError=>1}
     	);
 }
@@ -35,8 +35,8 @@ sub disconnect_node {
 }	
 sub create_prepare_db {
      if($dbi) {
-	my $database = $mysql_cfg->{database};
-	my $table = $mysql_cfg->{table};
+	my $database = $cfg_mysql->{database};
+	my $table = $cfg_mysql->{table};
 	$dbi->do("create database if not exists $database");
 	$dbi->do("use $database");
 	$dbi->do("create table if not exists 
@@ -52,7 +52,7 @@ sub insert_records {
 	for (my $i = 0; $i < 1000; $i++) {
 		my $user_recno = int(rand(50));
 		my $ammount = sprintf("%.2f", rand(5000));
-                my $sth = $dbi->prepare("insert into $mysql_cfg->{table}(user_recno,money_amount,ts_unix_timestamp) values (?,?,UNIX_TIMESTAMP())");
+                my $sth = $dbi->prepare("insert into $cfg_mysql->{table}(user_recno,money_amount,ts_unix_timestamp) values (?,?,UNIX_TIMESTAMP())");
 		$sth->execute($user_recno, $ammount);
 	}
      }
@@ -61,7 +61,7 @@ else {print("Can't insert records\n");}
 }
 sub return_sum_amount {
       if($dbi){
-	my $res =$dbi->prepare("select recno, sum(money_amount) as total, count(recno) as record_count from $mysql_cfg->{table} group by user_recno");
+	my $res =$dbi->prepare("select recno, sum(money_amount) as total, count(recno) as record_count from $cfg_mysql->{table} group by user_recno");
         $res->execute;
 	while (my $row=$res->fetchrow_arrayref){
 	      print join("\t",@$row),"\n";
@@ -71,11 +71,11 @@ sub return_sum_amount {
 }
 sub flush_records {
 	if($dbi){
-	     my $del = $dbi->prepare("truncate table $mysql_cfg->{table}");
+	     my $del = $dbi->prepare("truncate table $cfg_mysql->{table}");
 	     $del->execute;
 	}
 }
-my $memd = Cache::Memcached->new({servers => [ $memc_cfg->{host}.':'.$memc_cfg->{port}]});
+my $memd = Cache::Memcached->new({servers => [ $cfg_memc->{host}.':'.$cfg_memc->{port}]});
 sub pick_first_work_node {
 	for (my $i =1;$i < $cfg{num_nodes}; $i++) {
 	   my $snode = $memd->get("node${i}");
